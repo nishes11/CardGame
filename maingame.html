@@ -1,1 +1,448 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Susun Nombor — Educational Game</title>
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --accent:#3b82f6;
+      --muted:#6b7280;
+      --success:#10b981;
+      --danger:#ff0b0b;
+      --shadow: 0 8px 20px rgba(20,20,40,0.08);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
 
+    .card-app{
+      width:100%;
+      max-width:720px;
+      background:transparent;
+      text-align:center;
+    }
+
+    h1{
+      margin:0 0 12px 0;
+      font-size:20px;
+      font-weight:600;
+      letter-spacing:0.2px;
+    }
+    p.lead{
+      margin:0 0 18px 0;
+      color:var(--muted);
+      font-size:14px;
+    }
+
+    .board-wrap{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin-bottom:18px;
+    }
+
+    .board{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:center;
+      padding:12px;
+      border-radius:12px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.4));
+      box-shadow:var(--shadow);
+      min-height:120px;
+      touch-action:pan-y; /* allow vertical scrolling but prevent horizontal panning by default on cards */
+      user-select:none;
+    }
+
+    .card{
+      --w:78px;
+      width:var(--w);
+      height:98px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:var(--card);
+      border-radius:10px;
+      font-size:28px;
+      font-weight:700;
+      color:#0f172a;
+      box-shadow: 0 6px 14px rgba(20,20,40,0.06);
+      transition:transform 150ms ease, box-shadow 150ms ease;
+      touch-action:pan-y; /* allow vertical scroll while dragging horizontally inside logic */
+      -webkit-user-select:none;
+      -webkit-touch-callout:none;
+      cursor:grab;
+    }
+
+    .card:active { cursor:grabbing; }
+
+    .placeholder{
+      width:var(--w);
+      height:98px;
+      border-radius:10px;
+      background:linear-gradient(90deg, rgba(59,130,246,0.06), rgba(59,130,246,0.03));
+      border:2px dashed rgba(59,130,246,0.18);
+      box-sizing:border-box;
+    }
+
+    .card.dragging{
+      box-shadow: 0 18px 36px rgba(20,20,40,0.14);
+      transform:scale(1.03);
+      opacity:0.98;
+      cursor:grabbing;
+    }
+
+    .controls{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      align-items:center;
+      justify-content:center;
+      margin-top:6px;
+    }
+
+    .btn{
+      appearance:none;
+      border:0;
+      background:var(--accent);
+      color:white;
+      padding:12px 18px;
+      border-radius:10px;
+      font-weight:700;
+      font-size:16px;
+      box-shadow:0 8px 20px rgba(59,130,246,0.14);
+      min-width:200px;
+    }
+
+    .btn.secondary{
+      background:#fff;
+      color:var(--muted);
+      border:1px solid #e6e9ef;
+      box-shadow:none;
+      font-weight:600;
+    }
+
+    .message{
+      margin-top:6px;
+      font-weight:700;
+      font-size:16px;
+      min-height:28px;
+    }
+    .message.success{ color:var(--success); }
+    .message.error{ color:var(--danger); }
+
+    /* Make layout responsive: larger cards on wide screens */
+    @media (min-width:480px){
+      .card{ --w:88px; height:108px; font-size:32px; }
+      .placeholder{ height:108px; }
+    }
+
+    /* Small hint */
+    .hint{
+      margin-top:10px;
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    footer{
+      margin-top:14px;
+      font-size:12px;
+      color:var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="card-app" role="main">
+    <h1>Susun Nombor (Ascending)</h1>
+    <p class="lead">Seret kad secara melintang untuk menyusun dari kecil ke besar.</p>
+
+    <div class="board-wrap">
+      <div id="board" class="board" aria-label="Board of number cards"></div>
+    </div>
+
+    <div class="controls">
+      <button id="checkBtn" class="btn" type="button">Periksa Jawapan</button>
+      <button id="playAgainBtn" class="btn secondary" style="display:none;" type="button">Main Lagi</button>
+      <div id="message" class="message" aria-live="polite"></div>
+      <div class="hint">Rule: Drag je kad dekat skrin tu.</div>
+    </div>
+
+    <footer>Yeet</footer>
+  </main>
+
+  <script>
+    (function(){
+      // Game state
+      let numbers = [];
+      const BOARD = document.getElementById('board');
+      const CHECK_BTN = document.getElementById('checkBtn');
+      const PLAY_BTN = document.getElementById('playAgainBtn');
+      const MSG = document.getElementById('message');
+
+      // Drag state
+      let draggingEl = null;
+      let placeholder = null;
+      let startPointerX = 0;
+      let startElRect = null;
+      let offsetX = 0;
+      let containerRect = null;
+      let pointerId = null;
+
+      // Utilities
+      function randInt(min, max){
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      function generateUniqueRandoms(count, min, max){
+        const set = new Set();
+        const range = max - min + 1;
+        if (count > range) throw new Error('Range too small');
+        while(set.size < count){
+          set.add(randInt(min, max));
+        }
+        return Array.from(set);
+      }
+
+      function shuffle(arr){
+        for(let i = arr.length - 1; i > 0; i--){
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      // Render board from numbers array
+      function renderBoard(){
+        BOARD.innerHTML = '';
+        numbers.forEach((n, i) => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          // Use dataset.value so we can reconstruct order after reordering
+          card.dataset.value = String(n);
+          card.dataset.index = String(i);
+          card.setAttribute('role','button');
+          card.setAttribute('aria-grabbed','false');
+          card.textContent = n;
+          // attach pointerdown for drag
+          card.addEventListener('pointerdown', onPointerDown);
+          // prevent default touch action on card itself to avoid selection
+          card.style.touchAction = 'pan-y';
+          BOARD.appendChild(card);
+        });
+      }
+
+      // Initialize game
+      function initGame(){
+        MSG.textContent = '';
+        MSG.className = 'message';
+        PLAY_BTN.style.display = 'none';
+
+        // create unique numbers from -9 to 9, 5 items
+        numbers = generateUniqueRandoms(5, -9, 9);
+        // shuffle them for initial random order
+        shuffle(numbers);
+        renderBoard();
+      }
+
+      // Pointer handlers implement mobile-friendly drag with a placeholder
+      function onPointerDown(e){
+        // Only left clicks/touches
+        if (e.button && e.button !== 0) return;
+        e.preventDefault();
+
+        // Save pointer id to release capture later
+        pointerId = e.pointerId;
+
+        const target = e.currentTarget;
+        draggingEl = target;
+        containerRect = BOARD.getBoundingClientRect();
+
+        startElRect = draggingEl.getBoundingClientRect();
+        offsetX = e.clientX - startElRect.left;
+        startPointerX = e.clientX;
+
+        // Create placeholder where the card sits
+        placeholder = document.createElement('div');
+        placeholder.className = 'placeholder';
+        placeholder.style.width = startElRect.width + 'px';
+        placeholder.style.height = startElRect.height + 'px';
+
+        // Insert placeholder before the dragged element and move draggedEl to absolute positioning
+        BOARD.insertBefore(placeholder, draggingEl);
+        // compute left/top relative to BOARD
+        const left = startElRect.left - containerRect.left;
+        const top = startElRect.top - containerRect.top;
+
+        // Style dragged element to float above
+        draggingEl.classList.add('dragging');
+        draggingEl.setAttribute('aria-grabbed','true');
+        draggingEl.style.position = 'absolute';
+        draggingEl.style.left = left + 'px';
+        draggingEl.style.top = top + 'px';
+        draggingEl.style.width = startElRect.width + 'px';
+        draggingEl.style.zIndex = 1000;
+        draggingEl.style.transition = 'none';
+        // attach to container so absolute coordinates are relative to container
+        BOARD.appendChild(draggingEl);
+
+        // capture pointer so we receive move/up events even if pointer moves off element
+        try { draggingEl.setPointerCapture(e.pointerId); } catch(err) {}
+
+        document.addEventListener('pointermove', onPointerMove, {passive:false});
+        document.addEventListener('pointerup', onPointerUp, {passive:false});
+        document.addEventListener('pointercancel', onPointerUp, {passive:false});
+      }
+
+      function onPointerMove(e){
+        if (!draggingEl || e.pointerId !== pointerId) return;
+        e.preventDefault();
+
+        // update containerRect in case of small layout shifts
+        containerRect = BOARD.getBoundingClientRect();
+
+        const clientX = e.clientX;
+        // compute new left relative to BOARD
+        const newLeft = clientX - containerRect.left - offsetX;
+        draggingEl.style.left = newLeft + 'px';
+
+        // find the best place to insert placeholder
+        // loop through current children (which are all non-absolute positioned cards or placeholders)
+        const children = Array.from(BOARD.querySelectorAll('.card, .placeholder')).filter(el => el !== draggingEl);
+        let inserted = false;
+        for (const child of children){
+          // ignore placeholder itself
+          if (child === placeholder) continue;
+          const r = child.getBoundingClientRect();
+          const mid = r.left + r.width / 2;
+          if (clientX < mid){
+            if (BOARD.contains(placeholder) && placeholder.nextSibling !== child){
+              BOARD.insertBefore(placeholder, child);
+            } else if (!BOARD.contains(placeholder)){
+              BOARD.insertBefore(placeholder, child);
+            }
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted){
+          // put placeholder at the end
+          if (!BOARD.contains(placeholder) || BOARD.lastElementChild !== placeholder){
+            BOARD.appendChild(placeholder);
+          }
+        }
+      }
+
+      function onPointerUp(e){
+        if (!draggingEl || e.pointerId !== pointerId) return;
+        e.preventDefault();
+
+        // release pointer capture
+        try { draggingEl.releasePointerCapture(e.pointerId); } catch(err) {}
+
+        // remove absolute styling and put the element at placeholder position
+        draggingEl.style.position = '';
+        draggingEl.style.left = '';
+        draggingEl.style.top = '';
+        draggingEl.style.width = '';
+        draggingEl.style.zIndex = '';
+        draggingEl.style.transition = '';
+        draggingEl.classList.remove('dragging');
+        draggingEl.setAttribute('aria-grabbed','false');
+
+        // Replace placeholder with the dragged element
+        if (BOARD.contains(placeholder)){
+          BOARD.insertBefore(draggingEl, placeholder);
+          BOARD.removeChild(placeholder);
+        } else {
+          // fallback: append to board end
+          BOARD.appendChild(draggingEl);
+        }
+
+        // cleanup listeners
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
+        document.removeEventListener('pointercancel', onPointerUp);
+
+        // Update numbers array to match DOM order
+        const newOrder = Array.from(BOARD.children).map(c => Number(c.dataset.value));
+        numbers = newOrder.slice();
+
+        // Reset drag state
+        draggingEl = null;
+        placeholder = null;
+        pointerId = null;
+      }
+
+      // Check answer: sorted ascending?
+      function checkAnswer(){
+        const sorted = [...numbers].sort((a,b)=>a-b);
+        const correct = numbers.length === sorted.length && numbers.every((v,i)=>v === sorted[i]);
+        if (correct){
+          MSG.textContent = 'Anda Betul Sekali!';
+          MSG.className = 'message success';
+          const msg = document.getElementById('audio-kesan');
+          msg.audio = new Audio('success.mp3'); // optional: play a success sound if available
+          PLAY_BTN.style.display = 'inline-block';
+        } else {
+          MSG.textContent = 'Salah, sila cuba lagi!';
+          MSG.className = 'message error';
+        }
+      }
+
+      // Play again resets the game
+      function playAgain(){
+        initGame();
+        // animate message clear
+        MSG.textContent = '';
+        MSG.className = 'message';
+        PLAY_BTN.style.display = 'none';
+      }
+
+      // Buttons
+      CHECK_BTN.addEventListener('click', checkAnswer);
+      PLAY_BTN.addEventListener('click', playAgain);
+
+      // Prevent text selection while dragging via CSS, but also disable double-tap zoom and callouts
+      document.addEventListener('dragstart', e => e.preventDefault());
+
+      // Initialize first game
+      initGame();
+
+      // Make sure board has minimal vertical spacing on orientation change
+      window.addEventListener('resize', () => {
+        // When viewport changes, if a drag is active, finalize it (rare)
+        if (draggingEl){
+          // finalize drop
+          if (placeholder && BOARD.contains(placeholder)){
+            BOARD.insertBefore(draggingEl, placeholder);
+            BOARD.removeChild(placeholder);
+          }
+          draggingEl.style.position = '';
+          draggingEl.style.left = '';
+          draggingEl.style.top = '';
+          draggingEl.style.width = '';
+          draggingEl.style.zIndex = '';
+          draggingEl.classList.remove('dragging');
+          draggingEl = null;
+          placeholder = null;
+          pointerId = null;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
